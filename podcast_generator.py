@@ -12,15 +12,16 @@ def generate_conversation(topic, resources):
     prompt = f"""Generate an engaging and dynamic conversation between two people discussing {topic}. Use these resources for information: {resources}
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
+```
 Speaker 1 (excited): <emphasis>Wow!</emphasis> Did you hear about the latest developments in {topic}?
 Speaker 2 (curious): No, I haven't. <break time="0.5s"/> What's happening?
 Speaker 1 (explaining): ...
+```
 
-You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
-
-Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, reassuring, thrilled
-
-Create a whole new conversation, varying emotions and speech patterns naturally.
+- You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
+- Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, reassuring, thrilled
+- Create a whole new conversation, do NOT repeat the example conversation.
+- Vary emotions and speech patterns naturally.
 
 Word limit: 300 words.
 """
