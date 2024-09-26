@@ -2,5 +2,4 @@ openai
 pydub
 requests
 beautifulsoup4
-cartesia
 python-dotenv

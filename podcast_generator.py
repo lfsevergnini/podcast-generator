@@ -2,11 +2,10 @@ import argparse
 import io
 import os
 import random
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-from cartesia import Cartesia
 from pydub import AudioSegment
-
 from crawler import Crawler
 
 load_dotenv()
@@ -21,7 +20,6 @@ openai_client = OpenAI(api_key=openai_api_key)
 cartesia_api_key = os.getenv("CARTESIA_API_KEY")
 if not cartesia_api_key:
     raise ValueError("CARTESIA_API_KEY environment variable is not set")
-cartesia_client = Cartesia(api_key=cartesia_api_key)
 
 def generate_conversation(podcast_name, topic, resources):
     # Fetch content from the resources
@@ -60,9 +58,11 @@ Word limit: 300 words.
     return response.choices[0].message.content
 
 def text_to_speech(text, voice_id, speed="normal", emotion=None):
-    output_format = cartesia_client.tts.get_output_format("raw_pcm_f32le_44100")
-
-    voice = cartesia_client.voices.get(id=voice_id)
+    output_format = {
+        "container": "wav",
+        "encoding": "pcm_f32le",
+        "sample_rate": 44100
+    }
 
     experimental_controls = {}
     if speed != "normal":
@@ -70,31 +70,30 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
     if emotion and emotion != "neutrality":
         experimental_controls["emotion"] = [emotion]
 
-    # Set up the websocket connection
-    ws = cartesia_client.tts.websocket()
-
-    # Generate audio using the websocket
-    response = ws.send(
-        model_id="sonic-english",
-        transcript=text,
-        voice_embedding=voice["embedding"],
-        stream=False,
-        output_format=output_format,
-        _experimental_voice_controls=experimental_controls
+    response = requests.post(
+        "https://api.cartesia.ai/tts/bytes",
+        headers={
+            "X-API-Key": cartesia_api_key,
+            "Cartesia-Version": "2024-06-10",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model_id": "sonic-english",
+            "transcript": text,
+            "voice": {
+                "mode": "id",
+                "id": voice_id,
+                "__experimental_controls": experimental_controls
+            },
+            "output_format": output_format,
+        }
     )
 
-    print(response)
-
-    ws.close()  # Close the websocket connection
-    
-    return response["audio"]
+    return response.content
 
 def create_podcast(conversation):
     combined_audio = AudioSegment.empty()
     lines = conversation.split('\n')
-
-    # Choose two different voice IDs from Cartesia's available voices
-    supported_voices = cartesia_client.voices.list()
 
     # Selected voices
     woman_voice_id = "156fb8d2-335b-4950-9cb3-a2d33befec77"
@@ -102,8 +101,6 @@ def create_podcast(conversation):
 
     voice_ids = [woman_voice_id, man_voice_id]
     random.shuffle(voice_ids)
-
-    print(lines)
 
     for line in lines:
         if line.startswith("Speaker 1"):
@@ -121,18 +118,12 @@ def create_podcast(conversation):
 
         audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
 
-        # audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content), sample_width=4, frame_rate=44100, channels=1)
-        audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content))
-
-        # Normalize audio to a consistent volume
+        audio_segment = AudioSegment.from_wav(io.BytesIO(audio_content))
         # normalized_audio = audio_segment.normalize()
-
-        # Add a slight fade in and out
         # faded_audio = normalized_audio.fade_in(50).fade_out(50)
 
         # Add a random pause for more natural timing
-        # combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
-        combined_audio += audio_segment# + AudioSegment.silent(duration=int(50 + 300 * random.random()))
+        combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
 
     # Export as WAV for highest quality
     combined_audio.export("podcast.wav", format="wav")
@@ -174,7 +165,6 @@ def main():
 # Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
 # """
     conversation = """Speaker 1 (neutrality): Hello Luis!
-Speaker 2 (curiosity): What's up?
 """
 
     # print(conversation)
