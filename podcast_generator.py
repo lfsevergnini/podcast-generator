@@ -12,13 +12,13 @@ from crawler import Crawler
 load_dotenv()
 
 # Initialize the OpenAI client
-openai_api_key = os.environ.get("OPENAI_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 openai_client = OpenAI(api_key=openai_api_key)
 
 # Initialize the Cartesia client
-cartesia_api_key = os.environ.get("CARTESIA_API_KEY")
+cartesia_api_key = os.getenv("CARTESIA_API_KEY")
 if not cartesia_api_key:
     raise ValueError("CARTESIA_API_KEY environment variable is not set")
 cartesia_client = Cartesia(api_key=cartesia_api_key)
@@ -60,32 +60,34 @@ Word limit: 300 words.
     return response.choices[0].message.content
 
 def text_to_speech(text, voice_id, speed="normal", emotion=None):
-    output_format = {
-        "container": "raw",
-        "encoding": "pcm_f32le",
-        "sample_rate": 44100,
-    }
+    output_format = cartesia_client.tts.get_output_format("raw_pcm_f32le_44100")
 
     voice = cartesia_client.voices.get(id=voice_id)
-    
-    experimental_controls = {"speed": speed}
+
+    experimental_controls = {}
+    if speed != "normal":
+        experimental_controls = {"speed": speed}
     if emotion and emotion != "neutrality":
-        experimental_controls["emotion"] = [f"{emotion}:medium"]
+        experimental_controls["emotion"] = [emotion]
 
-    audio_data = io.BytesIO()
+    # Set up the websocket connection
+    ws = cartesia_client.tts.websocket()
 
-    for output in cartesia_client.tts.sse(
+    # Generate audio using the websocket
+    response = ws.send(
         model_id="sonic-english",
         transcript=text,
         voice_embedding=voice["embedding"],
-        stream=True,
+        stream=False,
         output_format=output_format,
         _experimental_voice_controls=experimental_controls
-    ):
-        audio_data.write(output["audio"])
+    )
 
-    audio_data.seek(0)
-    return audio_data.getvalue()
+    print(response)
+
+    ws.close()  # Close the websocket connection
+    
+    return response["audio"]
 
 def create_podcast(conversation):
     combined_audio = AudioSegment.empty()
@@ -100,6 +102,8 @@ def create_podcast(conversation):
 
     voice_ids = [woman_voice_id, man_voice_id]
     random.shuffle(voice_ids)
+
+    print(lines)
 
     for line in lines:
         if line.startswith("Speaker 1"):
@@ -116,31 +120,37 @@ def create_podcast(conversation):
         speed = get_speed_for_emotion(emotion)
 
         audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
-        audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content), sample_width=4, frame_rate=44100, channels=1)
+
+        # audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content), sample_width=4, frame_rate=44100, channels=1)
+        audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content))
 
         # Normalize audio to a consistent volume
-        normalized_audio = audio_segment.normalize()
+        # normalized_audio = audio_segment.normalize()
 
         # Add a slight fade in and out
-        faded_audio = normalized_audio.fade_in(50).fade_out(50)
+        # faded_audio = normalized_audio.fade_in(50).fade_out(50)
 
         # Add a random pause for more natural timing
-        combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
+        # combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
+        combined_audio += audio_segment# + AudioSegment.silent(duration=int(50 + 300 * random.random()))
 
     # Export as WAV for highest quality
-    combined_audio.export("podcast.wav", format="wav", parameters=["-ar", "44100", "-ac", "2"])
+    combined_audio.export("podcast.wav", format="wav")
 
     # Convert WAV to MP3 with high bitrate for browser compatibility
-    AudioSegment.from_wav("podcast.wav").export("podcast.mp3", format="mp3", bitrate="192k")
+    # AudioSegment.from_wav("podcast.wav").export("podcast.mp3", format="mp3", bitrate="192k")
 
-    os.remove("podcast.wav")
+    # os.remove("podcast.wav")
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
-        "neutrality": "normal",
-        "curiosity": "slow",
-        "positivity": "fast",
-        "surprise": "fast",
+        "curious": "normal",
+        "explaining": "slow",
+        "surprised": "fast",
+        "excited": "fast",
+        "thoughtful": "slow",
+        "enthusiastic": "fast",
+        "reassuring": "normal",
     }
     return emotion_speeds.get(emotion, "normal")
 
@@ -153,19 +163,21 @@ def main():
     args = parser.parse_args()
 
     # conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
-    conversation = """
-        Speaker 1 (neutrality): Hello Luis!
-        Speaker 2 (curiosity): What's up?
-        Speaker 1 (positivity): Not much, just working on this podcast. You?
-        Speaker 2 (surprise): Podcast?
-        Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
-        Speaker 2 (curiosity): How's it going?
-        Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
-        Speaker 2 (curiosity): What's the topic?
-        Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
-    """
+#     conversation = """Speaker 1 (neutrality): Hello Luis!
+# Speaker 2 (curiosity): What's up?
+# Speaker 1 (positivity): Not much, just working on this podcast. You?
+# Speaker 2 (surprise): Podcast?
+# Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
+# Speaker 2 (curiosity): How's it going?
+# Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
+# Speaker 2 (curiosity): What's the topic?
+# Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
+# """
+    conversation = """Speaker 1 (neutrality): Hello Luis!
+Speaker 2 (curiosity): What's up?
+"""
 
-    print(conversation)
+    # print(conversation)
 
     create_podcast(conversation)
 
