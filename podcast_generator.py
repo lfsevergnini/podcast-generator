@@ -5,9 +5,8 @@ import random
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydub import AudioSegment
 from crawler import Crawler
-
+from pydub import AudioSegment, playback
 load_dotenv()
 
 # Initialize the OpenAI client
@@ -92,7 +91,6 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
     return response.content
 
 def create_podcast(conversation):
-    combined_audio = AudioSegment.empty()
     lines = conversation.split('\n')
 
     # Selected voices
@@ -101,6 +99,8 @@ def create_podcast(conversation):
 
     voice_ids = [woman_voice_id, man_voice_id]
     random.shuffle(voice_ids)
+
+    combined_wav = AudioSegment.empty()
 
     for line in lines:
         if line.startswith("Speaker 1"):
@@ -115,23 +115,20 @@ def create_podcast(conversation):
             continue
 
         speed = get_speed_for_emotion(emotion)
-
         audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
 
-        audio_segment = AudioSegment.from_wav(io.BytesIO(audio_content))
-        # normalized_audio = audio_segment.normalize()
-        # faded_audio = normalized_audio.fade_in(50).fade_out(50)
+        with open("temp.wav", "wb") as f:
+            f.write(audio_content)
 
-        # Add a random pause for more natural timing
-        combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
+        segment = AudioSegment.from_wav("temp.wav")
+        normalized_segment = segment.normalize()
+        combined_wav += normalized_segment
 
-    # Export as WAV for highest quality
-    combined_audio.export("podcast.wav", format="wav")
+        playback.play(segment)
 
-    # Convert WAV to MP3 with high bitrate for browser compatibility
-    # AudioSegment.from_wav("podcast.wav").export("podcast.mp3", format="mp3", bitrate="192k")
+    combined_wav.export("podcast.wav", format="wav")
 
-    # os.remove("podcast.wav")
+    print("High-quality podcast generated and saved as 'podcast.wav'")
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
@@ -170,8 +167,6 @@ def main():
     # print(conversation)
 
     create_podcast(conversation)
-
-    print("Podcast generated and saved as 'podcast.mp3'")
 
 if __name__ == "__main__":
     main()
