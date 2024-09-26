@@ -1,13 +1,13 @@
 import os
-import openai
+from openai import OpenAI
 from pydub import AudioSegment
 
-# Set your OpenAI API key
-openai.api_key = "your-api-key-here"
+# Initialize the OpenAI client using the API key from environment variable
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def generate_conversation(topic, resources):
     prompt = f"Generate a conversation between two people discussing {topic}. Use these resources for information: {resources}"
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "You are generating a podcast script for two speakers."},
@@ -17,7 +17,7 @@ def generate_conversation(topic, resources):
     return response.choices[0].message.content
 
 def text_to_speech(text, voice):
-    response = openai.audio.speech.create(
+    response = client.audio.speech.create(
         model="tts-1",
         voice=voice,
         input=text
@@ -37,14 +37,16 @@ def create_podcast(conversation):
             text = line.replace("Speaker 2:", "").strip()
         else:
             continue
-        
+
         audio_content = text_to_speech(text, voice)
         with open("temp.mp3", "wb") as f:
             f.write(audio_content)
-        
+
         segment = AudioSegment.from_mp3("temp.mp3")
-        combined_audio += segment + AudioSegment.silent(duration=500)  # Add a 0.5s pause
-    
+
+        # Add a random pause between 0.25s and 0.5s
+        combined_audio += segment + AudioSegment.silent(duration=int(250 + 250 * random.random()))
+
     os.remove("temp.mp3")
     combined_audio.export("podcast.mp3", format="mp3")
 
