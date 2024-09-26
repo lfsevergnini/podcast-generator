@@ -2,18 +2,26 @@ import argparse
 import io
 import os
 import random
+from dotenv import load_dotenv
 from openai import OpenAI
+from cartesia import Cartesia
 from pydub import AudioSegment
 
 from crawler import Crawler
 
+load_dotenv()
+
 # Initialize the OpenAI client
-api_key = os.environ.get("OPENAI_API_KEY")
-
-if not api_key:
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+if not openai_api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
+openai_client = OpenAI(api_key=openai_api_key)
 
-client = OpenAI(api_key=api_key)
+# Initialize the Cartesia client
+cartesia_api_key = os.environ.get("CARTESIA_API_KEY")
+if not cartesia_api_key:
+    raise ValueError("CARTESIA_API_KEY environment variable is not set")
+cartesia_client = Cartesia(api_key=cartesia_api_key)
 
 def generate_conversation(podcast_name, topic, resources):
     # Fetch content from the resources
@@ -35,14 +43,14 @@ Speaker ??? (reassuring): And that wraps up our podcast for today.
 ```
 
 - You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
-- Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, and reassuring.
+- Supported emotions (within the parentheses): neutrality, curiosity, positivity, and surprise.
 - Create a whole new conversation, do NOT repeat the example conversation.
 - Vary emotions and speech patterns naturally.
 - If the resources provide author names, you may cite them as a reference.
 
 Word limit: 300 words.
 """
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are generating a lively podcast script for two speakers with varied emotions and speech patterns."},
@@ -51,40 +59,64 @@ Word limit: 300 words.
     )
     return response.choices[0].message.content
 
-def text_to_speech(text, voice, speed=1.0, model="tts-1-hd"):
-    # Convert our custom tags to SSML
-    ssml_text = f"<speak>{text}</speak>"
+def text_to_speech(text, voice_id, speed="normal", emotion=None):
+    output_format = {
+        "container": "raw",
+        "encoding": "pcm_f32le",
+        "sample_rate": 44100,
+    }
 
-    response = client.audio.speech.create(
-        input=ssml_text,
-        voice=voice,
-        speed=speed,
-        model=model,
-        response_format="wav"
-    )
-    return response.content
+    voice = cartesia_client.voices.get(id=voice_id)
+    
+    experimental_controls = {"speed": speed}
+    if emotion and emotion != "neutrality":
+        experimental_controls["emotion"] = [f"{emotion}:medium"]
+
+    audio_data = io.BytesIO()
+
+    for output in cartesia_client.tts.sse(
+        model_id="sonic-english",
+        transcript=text,
+        voice_embedding=voice["embedding"],
+        stream=True,
+        output_format=output_format,
+        _experimental_voice_controls=experimental_controls
+    ):
+        audio_data.write(output["audio"])
+
+    audio_data.seek(0)
+    return audio_data.getvalue()
 
 def create_podcast(conversation):
     combined_audio = AudioSegment.empty()
     lines = conversation.split('\n')
-    
+
+    # Choose two different voice IDs from Cartesia's available voices
+    supported_voices = cartesia_client.voices.list()
+
+    # Selected voices
+    woman_voice_id = "156fb8d2-335b-4950-9cb3-a2d33befec77"
+    man_voice_id = "ee7ea9f8-c0c1-498c-9279-764d6b56d189"
+
+    voice_ids = [woman_voice_id, man_voice_id]
+    random.shuffle(voice_ids)
+
     for line in lines:
         if line.startswith("Speaker 1"):
-            voice = "shimmer"
+            voice_id = voice_ids[0]
             text = line.split(":", 1)[1].strip()
             emotion = line.split("(")[1].split(")")[0]
         elif line.startswith("Speaker 2"):
-            voice = "onyx"
+            voice_id = voice_ids[1]
             text = line.split(":", 1)[1].strip()
             emotion = line.split("(")[1].split(")")[0]
         else:
             continue
 
-        # Adjust speed and pitch based on emotion
         speed = get_speed_for_emotion(emotion)
-        
-        audio_content = text_to_speech(text, voice, speed=speed)
-        audio_segment = AudioSegment.from_wav(io.BytesIO(audio_content))
+
+        audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
+        audio_segment = AudioSegment.from_raw(io.BytesIO(audio_content), sample_width=4, frame_rate=44100, channels=1)
 
         # Normalize audio to a consistent volume
         normalized_audio = audio_segment.normalize()
@@ -105,15 +137,12 @@ def create_podcast(conversation):
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
-        "curious": 1.0,
-        "explaining": 0.95,
-        "surprised": 1.1,
-        "excited": 1.15,
-        "thoughtful": 0.9,
-        "enthusiastic": 1.12,
-        "reassuring": 1.05,
+        "neutrality": "normal",
+        "curiosity": "slow",
+        "positivity": "fast",
+        "surprise": "fast",
     }
-    return emotion_speeds.get(emotion, 1.0)
+    return emotion_speeds.get(emotion, "normal")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
@@ -123,7 +152,18 @@ def main():
 
     args = parser.parse_args()
 
-    conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
+    # conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
+    conversation = """
+        Speaker 1 (neutrality): Hello Luis!
+        Speaker 2 (curiosity): What's up?
+        Speaker 1 (positivity): Not much, just working on this podcast. You?
+        Speaker 2 (surprise): Podcast?
+        Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
+        Speaker 2 (curiosity): How's it going?
+        Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
+        Speaker 2 (curiosity): What's the topic?
+        Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
+    """
 
     print(conversation)
 
