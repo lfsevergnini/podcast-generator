@@ -15,7 +15,7 @@ if not api_key:
 
 client = OpenAI(api_key=api_key)
 
-def generate_conversation(topic, resources):
+def generate_conversation(podcast_name, topic, resources):
     # Fetch content from the resources
     resource_list = resources.split(',')
     crawler = Crawler(resource_list)
@@ -26,7 +26,7 @@ def generate_conversation(topic, resources):
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 ```
-Speaker 1 (excited): <emphasis>Welcome to our podcast!</emphasis> Today we're going to talk about {topic}.
+Speaker 1 (excited): <emphasis>Welcome to the {podcast_name} podcast!</emphasis> Today we're going to talk about {topic}.
 Speaker 2 (curious): ...
 Speaker 1 (explaining): ...
 ...
@@ -117,12 +117,13 @@ def get_speed_for_emotion(emotion):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
+    parser.add_argument("--podcast_name", type=str, required=True, help="The name of the podcast")
     parser.add_argument("--topic", type=str, required=True, help="The topic of the podcast")
     parser.add_argument("--resources", type=str, required=True, help="Comma-separated list of resources for the podcast")
 
     args = parser.parse_args()
 
-    conversation = generate_conversation(args.topic, args.resources)
+    conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
 
     print(conversation)
 
