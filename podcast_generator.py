@@ -10,18 +10,22 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def generate_conversation(topic, resources):
     prompt = f"""Generate an engaging and dynamic conversation between two people discussing {topic}. Use these resources for information: {resources}
-Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format:
+Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 Speaker 1 (excited): <emphasis>Wow!</emphasis> Did you hear about the latest developments in {topic}?
 Speaker 2 (curious): No, I haven't. <break time="0.5s"/> What's happening?
 Speaker 1 (explaining): ...
 
-Possible emotions: excited, curious, explaining, surprised, thoughtful, enthusiastic
+You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
+
+Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, reassuring, thrilled
 
 Create a whole new conversation, varying emotions and speech patterns naturally.
+
+Word limit: 300 words.
 """
     response = client.chat.completions.create(
-        model="gpt-4-turbo-preview",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are generating a lively podcast script for two speakers with varied emotions and speech patterns."},
             {"role": "user", "content": prompt}
@@ -70,8 +74,8 @@ def create_podcast(conversation):
         # Add a slight fade in and out
         faded_audio = normalized_audio.fade_in(50).fade_out(50)
 
-        # Add a random pause between 0.3s and 0.7s for more natural timing
-        combined_audio += faded_audio + AudioSegment.silent(duration=int(300 + 200 * random.random()))
+        # Add a random pause for more natural timing
+        combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
 
     # Export as WAV for highest quality
     combined_audio.export("podcast.wav", format="wav", parameters=["-ar", "44100", "-ac", "2"])
@@ -87,8 +91,10 @@ def get_speed_for_emotion(emotion):
         "curious": 1.0,
         "explaining": 0.95,
         "surprised": 1.1,
+        "thrilled": 1.25,
         "thoughtful": 0.9,
-        "enthusiastic": 1.2
+        "enthusiastic": 1.2,
+        "reassuring": 1.05,
     }
     return emotion_speeds.get(emotion, 1.0)
 
