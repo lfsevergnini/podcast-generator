@@ -1,3 +1,4 @@
+import argparse
 import io
 import os
 import random
@@ -13,7 +14,7 @@ Make the conversation lively and natural, including emotions, emphasis, and vari
 
 Speaker 1 (excited): <emphasis>Wow!</emphasis> Did you hear about the latest developments in {topic}?
 Speaker 2 (curious): No, I haven't. <break time="0.5s"/> What's happening?
-Speaker 1 (explaining): Well, according to [resource], ...
+Speaker 1 (explaining): ...
 
 Possible emotions: excited, curious, explaining, surprised, thoughtful, enthusiastic
 
@@ -91,14 +92,20 @@ def get_speed_for_emotion(emotion):
     }
     return emotion_speeds.get(emotion, 1.0)
 
-# Example usage
-topic = "The future of AI"
-resources = "https://example.com/ai-article, https://example.com/future-tech"
+def main():
+    parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
+    parser.add_argument("--topic", type=str, required=True, help="The topic of the podcast")
+    parser.add_argument("--resources", type=str, required=True, help="Comma-separated list of resources for the podcast")
 
-conversation = generate_conversation(topic, resources)
+    args = parser.parse_args()
 
-print(conversation)
+    conversation = generate_conversation(args.topic, args.resources)
 
-create_podcast(conversation)
+    print(conversation)
 
-print("Podcast generated and saved as 'podcast.mp3'")
+    create_podcast(conversation)
+
+    print("Podcast generated and saved as 'podcast.mp3'")
+
+if __name__ == "__main__":
+    main()
