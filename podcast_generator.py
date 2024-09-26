@@ -5,8 +5,13 @@ import random
 from openai import OpenAI
 from pydub import AudioSegment
 
-# Initialize the OpenAI client using the API key from environment variable
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Initialize the OpenAI client
+api_key = os.environ.get("OPENAI_API_KEY")
+
+if not api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+
+client = OpenAI(api_key=api_key)
 
 def generate_conversation(topic, resources):
     prompt = f"""Generate an engaging and dynamic conversation between two people discussing {topic}. Use these resources for information: {resources}
