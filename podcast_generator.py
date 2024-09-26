@@ -5,6 +5,8 @@ import random
 from openai import OpenAI
 from pydub import AudioSegment
 
+from crawler import Crawler
+
 # Initialize the OpenAI client
 api_key = os.environ.get("OPENAI_API_KEY")
 
@@ -14,19 +16,29 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 def generate_conversation(topic, resources):
-    prompt = f"""Generate an engaging and dynamic conversation between two people discussing {topic}. Use these resources for information: {resources}
+    # Fetch content from the resources
+    resource_list = resources.split(',')
+    crawler = Crawler(resource_list)
+    fetched_content = crawler.fetch_content()
+    resources_text = " ".join(fetched_content)
+
+    prompt = f"""Generate an engaging and dynamic conversation between two people discussing {topic}. Use these resources for information: {resources_text}
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 ```
-Speaker 1 (excited): <emphasis>Wow!</emphasis> Did you hear about the latest developments in {topic}?
-Speaker 2 (curious): No, I haven't. <break time="0.5s"/> What's happening?
+Speaker 1 (excited): <emphasis>Welcome to our podcast!</emphasis> Today we're going to talk about {topic}.
+Speaker 2 (curious): ...
 Speaker 1 (explaining): ...
+...
+...
+Speaker ??? (reassuring): And that wraps up our podcast for today.
 ```
 
 - You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
-- Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, reassuring, thrilled
+- Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, and reassuring.
 - Create a whole new conversation, do NOT repeat the example conversation.
 - Vary emotions and speech patterns naturally.
+- If the resources provide author names, you may cite them as a reference.
 
 Word limit: 300 words.
 """
@@ -93,13 +105,12 @@ def create_podcast(conversation):
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
-        "excited": 1.15,
         "curious": 1.0,
         "explaining": 0.95,
         "surprised": 1.1,
-        "thrilled": 1.25,
+        "excited": 1.15,
         "thoughtful": 0.9,
-        "enthusiastic": 1.2,
+        "enthusiastic": 1.12,
         "reassuring": 1.05,
     }
     return emotion_speeds.get(emotion, 1.0)
