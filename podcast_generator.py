@@ -8,6 +8,8 @@ import soundfile as sf
 from dotenv import load_dotenv
 from openai import OpenAI
 from crawler import Crawler
+import scipy.signal  # Added for resampling
+
 load_dotenv()
 
 # Initialize the OpenAI client
@@ -96,7 +98,7 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
         print(f"Error generating audio: {e}")
         return None
 
-def create_podcast(conversation, character1, character2):
+def create_podcast(conversation, character1, character2, bg_music_path = None):
     lines = conversation.split('\n')
 
     voices = {
@@ -143,22 +145,35 @@ def create_podcast(conversation, character1, character2):
     combined_audio = np.concatenate([segment for pair in zip(audio_segments, silences + [np.array([])])
                                      for segment in pair if len(segment) > 0])
 
+    # Load and prepare background music
+    if bg_music_path:
+        bg_music = load_background_music(bg_music_path, len(combined_audio) / samplerate, samplerate)
+
+        # Mix background music with voice audio
+        bg_volume = 0.1  # Adjust this value to change the background music volume
+        mixed_audio = combined_audio + bg_music * bg_volume
+    else:
+        mixed_audio = combined_audio
+
+    # Normalize the mixed audio
+    mixed_audio = mixed_audio / np.max(np.abs(mixed_audio))
+
     # Add fade-in effect
     fade_duration = 0.5  # 0.5 seconds fade-in
     fade_length = int(fade_duration * samplerate)
     fade_in = np.linspace(0, 1, fade_length)
-    combined_audio[:fade_length] *= fade_in
+    mixed_audio[:fade_length] *= fade_in
 
     # Add fade-out effect
     fade_duration = 0.2
     fade_length = int(fade_duration * samplerate)
     fade_out = np.linspace(1, 0, fade_length)
-    combined_audio[-fade_length:] *= fade_out
+    mixed_audio[-fade_length:] *= fade_out
 
-    # Write the combined audio to a file
-    sf.write("podcast.wav", combined_audio, samplerate)
+    # Write the mixed audio to a file
+    sf.write("podcast.wav", mixed_audio, samplerate)
 
-    print("High-quality podcast generated and saved as 'podcast.wav'")
+    print("High-quality podcast with background music generated and saved as 'podcast.wav'")
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
@@ -186,6 +201,28 @@ def get_supported_emotion_for_emotion(emotion):
 
     return "neutrality"
 
+def load_background_music(file_path, target_duration, samplerate):
+    """Load background music and prepare it for mixing."""
+    bg_audio, bg_sr = sf.read(file_path)
+
+    # Resample if necessary
+    if bg_sr != samplerate:
+        num_samples = int(len(bg_audio) * samplerate / bg_sr)
+        bg_audio = scipy.signal.resample(bg_audio, num_samples)
+
+    # Convert to mono if stereo
+    if len(bg_audio.shape) > 1:
+        bg_audio = np.mean(bg_audio, axis=1)
+
+    # Loop the audio if it's shorter than the target duration
+    while len(bg_audio) < target_duration * samplerate:
+        bg_audio = np.concatenate([bg_audio, bg_audio])
+
+    # Trim to target duration
+    bg_audio = bg_audio[:int(target_duration * samplerate)]
+
+    return bg_audio
+
 def main():
     parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
     parser.add_argument("--podcast_name", type=str, required=True, help="The name of the podcast")
@@ -193,6 +230,7 @@ def main():
     parser.add_argument("--resources", type=str, required=True, help="Comma-separated list of resources for the podcast")
     parser.add_argument("--character1", type=str, default="Jerry", help="Name of the first character")
     parser.add_argument("--character2", type=str, default="Lisa", help="Name of the second character")
+    parser.add_argument("--bg_music", type=str, help="Path to background music file")
 
     args = parser.parse_args()
 
@@ -200,7 +238,7 @@ def main():
 
     print(conversation)
 
-    create_podcast(conversation, args.character1, args.character2)
+    create_podcast(conversation, args.character1, args.character2, args.bg_music)
 
 if __name__ == "__main__":
     main()
