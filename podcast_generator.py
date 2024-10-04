@@ -35,12 +35,14 @@ Make the conversation lively and natural, including emotions, emphasis, and vari
 Speaker 1 (positivity): Welcome to the {podcast_name} podcast! Today we're going to talk about {topic}.
 Speaker 2 (curiosity): ...
 Speaker 1 (neutrality): ...
+Speaker 1 (positivity): ...
+Speaker 2 (surprise): ...
 ...
 ...
 Speaker ??? (positivity): And that wraps up our podcast for today.
 ```
 
-- You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
+- You can alternate between the two speakers, but don't make it too obvious. During an explanation, the speaker should probably be the same.
 - Supported emotions (within the parentheses): neutrality, curiosity, positivity, and surprise.
 - Create a whole new conversation, do NOT repeat the example conversation.
 - Vary emotions and speech patterns naturally.
@@ -49,7 +51,7 @@ Speaker ??? (positivity): And that wraps up our podcast for today.
 Word limit: 300 words.
 """
     response = openai_client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are generating a lively podcast script for two speakers with varied emotions and speech patterns."},
             {"role": "user", "content": prompt}
@@ -132,7 +134,7 @@ def create_podcast(conversation):
         audio_segments.append(data)
 
     # Create silence between segments with random duration
-    silence_durations = np.random.uniform(0.3, 0.7, len(audio_segments) - 1)
+    silence_durations = np.random.uniform(0.4, 0.7, len(audio_segments) - 1)
     silences = [np.zeros(int(duration * samplerate), dtype=audio_segments[0].dtype) for duration in silence_durations]
 
     # Combine all audio segments with varying silence in between
