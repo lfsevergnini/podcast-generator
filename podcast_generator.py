@@ -32,12 +32,12 @@ def generate_conversation(podcast_name, topic, resources):
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 ```
-Speaker 1 (excited): <emphasis>Welcome to the {podcast_name} podcast!</emphasis> Today we're going to talk about {topic}.
-Speaker 2 (curious): ...
-Speaker 1 (explaining): ...
+Speaker 1 (positivity): Welcome to the {podcast_name} podcast! Today we're going to talk about {topic}.
+Speaker 2 (curiosity): ...
+Speaker 1 (neutrality): ...
 ...
 ...
-Speaker ??? (reassuring): And that wraps up our podcast for today.
+Speaker ??? (positivity): And that wraps up our podcast for today.
 ```
 
 - You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
@@ -68,10 +68,11 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
     if speed != "normal":
         experimental_controls = {"speed": speed}
     if emotion and emotion != "neutrality":
-        experimental_controls["emotion"] = [emotion]
+        experimental_controls["emotion"] = [get_supported_emotion_for_emotion(emotion)]
 
-    response = requests.post(
-        "https://api.cartesia.ai/tts/bytes",
+    try:
+        response = requests.post(
+            "https://api.cartesia.ai/tts/bytes",
         headers={
             "X-API-Key": cartesia_api_key,
             "Cartesia-Version": "2024-06-10",
@@ -86,10 +87,14 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
                 "__experimental_controls": experimental_controls
             },
             "output_format": output_format,
-        }
-    )
+            }
+        )
 
-    return response.content
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        print(f"Error generating audio: {e}")
+        return None
 
 def create_podcast(conversation):
     lines = conversation.split('\n')
@@ -151,6 +156,20 @@ def get_speed_for_emotion(emotion):
     }
     return emotion_speeds.get(emotion, "normal")
 
+def get_supported_emotion_for_emotion(emotion):
+    supported_emotions = ["neutrality", "curiosity", "positivity", "surprise"]
+
+    if emotion in supported_emotions:
+        return emotion
+    if emotion == "curious" or emotion == "thoughtful":
+        return "curiosity"
+    if emotion == "excited" or emotion == "enthusiastic":
+        return "positivity"
+    if emotion == "surprised" or emotion == "reassuring":
+        return "surprise"
+
+    return "neutrality"
+
 def main():
     parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
     parser.add_argument("--podcast_name", type=str, required=True, help="The name of the podcast")
@@ -159,19 +178,9 @@ def main():
 
     args = parser.parse_args()
 
-    # conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
-    conversation = """Speaker 1 (neutrality): Hello Luis!
-Speaker 2 (curiosity): How is it going?
-Speaker 1 (positivity): Not much, just working on this podcast. You?
-Speaker 2 (surprise): Podcast?
-Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
-Speaker 2 (curiosity): How's it going?
-Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
-Speaker 2 (curiosity): What's the topic?
-Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
-"""
+    conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
 
-    # print(conversation)
+    print(conversation)
 
     create_podcast(conversation)
 
