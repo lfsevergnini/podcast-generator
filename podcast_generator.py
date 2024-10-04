@@ -126,12 +126,13 @@ def create_podcast(conversation):
 
         audio_segments.append(data)
 
-    # Create silence between segments
-    silence_duration = 0.5  # 0.5 seconds of silence
-    silence = np.zeros(int(silence_duration * samplerate), dtype=audio_segments[0].dtype)
+    # Create silence between segments with random duration
+    silence_durations = np.random.uniform(0.3, 0.7, len(audio_segments) - 1)
+    silences = [np.zeros(int(duration * samplerate), dtype=audio_segments[0].dtype) for duration in silence_durations]
 
-    # Combine all audio segments with silence in between
-    combined_audio = np.concatenate([segment for pair in zip(audio_segments, [silence] * len(audio_segments)) for segment in pair][:-1])
+    # Combine all audio segments with varying silence in between
+    combined_audio = np.concatenate([segment for pair in zip(audio_segments, silences + [np.array([])])
+                                     for segment in pair if len(segment) > 0])
 
     # Write the combined audio to a file
     sf.write("podcast.wav", combined_audio, samplerate)
