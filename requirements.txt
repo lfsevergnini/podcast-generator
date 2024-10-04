@@ -3,5 +3,3 @@ pydub
 requests
 beautifulsoup4
 python-dotenv
-wave
-pyaudio
