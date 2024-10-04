@@ -1,5 +1,6 @@
 openai
-pydub
 requests
 beautifulsoup4
 python-dotenv
+soundfile
+numpy

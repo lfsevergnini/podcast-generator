@@ -3,10 +3,11 @@ import io
 import os
 import random
 import requests
+import numpy as np
+import soundfile as sf
 from dotenv import load_dotenv
 from openai import OpenAI
 from crawler import Crawler
-from pydub import AudioSegment, playback
 load_dotenv()
 
 # Initialize the OpenAI client
@@ -100,7 +101,8 @@ def create_podcast(conversation):
     voice_ids = [woman_voice_id, man_voice_id]
     random.shuffle(voice_ids)
 
-    combined_wav = AudioSegment.empty()
+    audio_segments = []
+    samplerate = None
 
     for line in lines:
         if line.startswith("Speaker 1"):
@@ -117,16 +119,22 @@ def create_podcast(conversation):
         speed = get_speed_for_emotion(emotion)
         audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
 
-        with open("temp.wav", "wb") as f:
-            f.write(audio_content)
+        # Read audio data from bytes
+        data, sr = sf.read(io.BytesIO(audio_content))
+        if samplerate is None:
+            samplerate = sr
 
-        segment = AudioSegment.from_wav("temp.wav")
-        normalized_segment = segment.normalize()
-        combined_wav += normalized_segment
+        audio_segments.append(data)
 
-        playback.play(segment)
+    # Create silence between segments
+    silence_duration = 0.5  # 0.5 seconds of silence
+    silence = np.zeros(int(silence_duration * samplerate), dtype=audio_segments[0].dtype)
 
-    combined_wav.export("podcast.wav", format="wav")
+    # Combine all audio segments with silence in between
+    combined_audio = np.concatenate([segment for pair in zip(audio_segments, [silence] * len(audio_segments)) for segment in pair][:-1])
+
+    # Write the combined audio to a file
+    sf.write("podcast.wav", combined_audio, samplerate)
 
     print("High-quality podcast generated and saved as 'podcast.wav'")
 
@@ -151,17 +159,15 @@ def main():
     args = parser.parse_args()
 
     # conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
-#     conversation = """Speaker 1 (neutrality): Hello Luis!
-# Speaker 2 (curiosity): What's up?
-# Speaker 1 (positivity): Not much, just working on this podcast. You?
-# Speaker 2 (surprise): Podcast?
-# Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
-# Speaker 2 (curiosity): How's it going?
-# Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
-# Speaker 2 (curiosity): What's the topic?
-# Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
-# """
     conversation = """Speaker 1 (neutrality): Hello Luis!
+Speaker 2 (curiosity): How is it going?
+Speaker 1 (positivity): Not much, just working on this podcast. You?
+Speaker 2 (surprise): Podcast?
+Speaker 1 (positivity): Yeah, I'm trying to get better at this whole podcast thing.
+Speaker 2 (curiosity): How's it going?
+Speaker 1 (positivity): Not bad, I think. I'm getting the hang of it.
+Speaker 2 (curiosity): What's the topic?
+Speaker 1 (positivity): I'm not sure yet, but I'm sure we'll figure it out.
 """
 
     # print(conversation)
