@@ -143,6 +143,18 @@ def create_podcast(conversation, character1, character2):
     combined_audio = np.concatenate([segment for pair in zip(audio_segments, silences + [np.array([])])
                                      for segment in pair if len(segment) > 0])
 
+    # Add fade-in effect
+    fade_duration = 0.5  # 0.5 seconds fade-in
+    fade_length = int(fade_duration * samplerate)
+    fade_in = np.linspace(0, 1, fade_length)
+    combined_audio[:fade_length] *= fade_in
+
+    # Add fade-out effect
+    fade_duration = 0.2
+    fade_length = int(fade_duration * samplerate)
+    fade_out = np.linspace(1, 0, fade_length)
+    combined_audio[-fade_length:] *= fade_out
+
     # Write the combined audio to a file
     sf.write("podcast.wav", combined_audio, samplerate)
 
