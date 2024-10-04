@@ -21,7 +21,7 @@ cartesia_api_key = os.getenv("CARTESIA_API_KEY")
 if not cartesia_api_key:
     raise ValueError("CARTESIA_API_KEY environment variable is not set")
 
-def generate_conversation(podcast_name, topic, resources):
+def generate_conversation(podcast_name, topic, resources, character1, character2):
     # Fetch content from the resources
     resource_list = resources.split(',')
     crawler = Crawler(resource_list)
@@ -32,8 +32,8 @@ def generate_conversation(podcast_name, topic, resources):
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 ```
-Speaker 1 (positivity): Welcome to the {podcast_name} podcast! Today we're going to talk about {topic}.
-Speaker 2 (curiosity): ...
+Speaker 1 (positivity): Hey, this is {character1}! Welcome to the {podcast_name} podcast! Today we're going to talk about {topic}.
+Speaker 2 (curiosity): Hello {character1}! This is {character2}! ...
 Speaker 1 (neutrality): ...
 Speaker 1 (positivity): ...
 Speaker 2 (surprise): ...
@@ -44,7 +44,6 @@ Speaker ??? (positivity): And that wraps up our podcast for today.
 
 - You can alternate between the two speakers, but don't make it too obvious. During an explanation, the speaker should probably be the same.
 - Supported emotions (within the parentheses): neutrality, curiosity, positivity, and surprise.
-- Create a whole new conversation, do NOT repeat the example conversation.
 - Vary emotions and speech patterns naturally.
 - If the resources provide author names, you may cite them as a reference.
 
@@ -98,15 +97,19 @@ def text_to_speech(text, voice_id, speed="normal", emotion=None):
         print(f"Error generating audio: {e}")
         return None
 
-def create_podcast(conversation):
+def create_podcast(conversation, character1, character2):
     lines = conversation.split('\n')
 
-    # Selected voices
-    woman_voice_id = "156fb8d2-335b-4950-9cb3-a2d33befec77"
-    man_voice_id = "ee7ea9f8-c0c1-498c-9279-764d6b56d189"
+    voices = {
+        "jerry": "ee7ea9f8-c0c1-498c-9279-764d6b56d189", # generic man
+        "lisa": "156fb8d2-335b-4950-9cb3-a2d33befec77", # generic woman
+        "dua": "a3e63c00-e221-48a6-97cc-e2f48135611a",
+        "gandalf": "c863b314-26b2-4855-b4fa-e38dc797385a",
+        "post": "0c9d1cae-538e-49c3-9d41-e63a3cf6d5f9",
+        "luis": "d95fed12-a136-4438-9be1-1aafa6c21b9b"
+    }
 
-    voice_ids = [woman_voice_id, man_voice_id]
-    random.shuffle(voice_ids)
+    voice_ids = [voices.get(character1.lower(), voices["jerry"]), voices.get(character2.lower(), voices["lisa"])]
 
     audio_segments = []
     samplerate = None
@@ -177,14 +180,16 @@ def main():
     parser.add_argument("--podcast_name", type=str, required=True, help="The name of the podcast")
     parser.add_argument("--topic", type=str, required=True, help="The topic of the podcast")
     parser.add_argument("--resources", type=str, required=True, help="Comma-separated list of resources for the podcast")
+    parser.add_argument("--character1", type=str, default="Jerry", help="Name of the first character")
+    parser.add_argument("--character2", type=str, default="Lisa", help="Name of the second character")
 
     args = parser.parse_args()
 
-    conversation = generate_conversation(args.podcast_name, args.topic, args.resources)
+    conversation = generate_conversation(args.podcast_name, args.topic, args.resources, args.character1, args.character2)
 
     print(conversation)
 
-    create_podcast(conversation)
+    create_podcast(conversation, args.character1, args.character2)
 
 if __name__ == "__main__":
     main()
