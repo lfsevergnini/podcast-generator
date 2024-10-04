@@ -150,7 +150,7 @@ def create_podcast(conversation, character1, character2, bg_music_path = None):
         bg_music = load_background_music(bg_music_path, len(combined_audio) / samplerate, samplerate)
 
         # Mix background music with voice audio
-        bg_volume = 0.1  # Adjust this value to change the background music volume
+        bg_volume = 0.05  # Adjust this value to change the background music volume
         mixed_audio = combined_audio + bg_music * bg_volume
     else:
         mixed_audio = combined_audio
