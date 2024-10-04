@@ -2,18 +2,24 @@ import argparse
 import io
 import os
 import random
+import requests
+import numpy as np
+import soundfile as sf
+from dotenv import load_dotenv
 from openai import OpenAI
-from pydub import AudioSegment
-
 from crawler import Crawler
+load_dotenv()
 
 # Initialize the OpenAI client
-api_key = os.environ.get("OPENAI_API_KEY")
-
-if not api_key:
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
+openai_client = OpenAI(api_key=openai_api_key)
 
-client = OpenAI(api_key=api_key)
+# Initialize the Cartesia client
+cartesia_api_key = os.getenv("CARTESIA_API_KEY")
+if not cartesia_api_key:
+    raise ValueError("CARTESIA_API_KEY environment variable is not set")
 
 def generate_conversation(podcast_name, topic, resources):
     # Fetch content from the resources
@@ -26,23 +32,23 @@ def generate_conversation(podcast_name, topic, resources):
 Make the conversation lively and natural, including emotions, emphasis, and varied speech patterns. Use the following format, no markdown:
 
 ```
-Speaker 1 (excited): <emphasis>Welcome to the {podcast_name} podcast!</emphasis> Today we're going to talk about {topic}.
-Speaker 2 (curious): ...
-Speaker 1 (explaining): ...
+Speaker 1 (positivity): Welcome to the {podcast_name} podcast! Today we're going to talk about {topic}.
+Speaker 2 (curiosity): ...
+Speaker 1 (neutrality): ...
 ...
 ...
-Speaker ??? (reassuring): And that wraps up our podcast for today.
+Speaker ??? (positivity): And that wraps up our podcast for today.
 ```
 
 - You can alternate between the two speakers, but don't repeat the same speaker twice in a row very often.
-- Possible emotions (within the parentheses): excited, curious, explaining, surprised, thoughtful, enthusiastic, and reassuring.
+- Supported emotions (within the parentheses): neutrality, curiosity, positivity, and surprise.
 - Create a whole new conversation, do NOT repeat the example conversation.
 - Vary emotions and speech patterns naturally.
 - If the resources provide author names, you may cite them as a reference.
 
 Word limit: 300 words.
 """
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are generating a lively podcast script for two speakers with varied emotions and speech patterns."},
@@ -51,69 +57,118 @@ Word limit: 300 words.
     )
     return response.choices[0].message.content
 
-def text_to_speech(text, voice, speed=1.0, model="tts-1-hd"):
-    # Convert our custom tags to SSML
-    ssml_text = f"<speak>{text}</speak>"
+def text_to_speech(text, voice_id, speed="normal", emotion=None):
+    output_format = {
+        "container": "wav",
+        "encoding": "pcm_f32le",
+        "sample_rate": 44100
+    }
 
-    response = client.audio.speech.create(
-        input=ssml_text,
-        voice=voice,
-        speed=speed,
-        model=model,
-        response_format="wav"
-    )
-    return response.content
+    experimental_controls = {}
+    if speed != "normal":
+        experimental_controls = {"speed": speed}
+    if emotion and emotion != "neutrality":
+        experimental_controls["emotion"] = [get_supported_emotion_for_emotion(emotion)]
+
+    try:
+        response = requests.post(
+            "https://api.cartesia.ai/tts/bytes",
+        headers={
+            "X-API-Key": cartesia_api_key,
+            "Cartesia-Version": "2024-06-10",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model_id": "sonic-english",
+            "transcript": text,
+            "voice": {
+                "mode": "id",
+                "id": voice_id,
+                "__experimental_controls": experimental_controls
+            },
+            "output_format": output_format,
+            }
+        )
+
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        print(f"Error generating audio: {e}")
+        return None
 
 def create_podcast(conversation):
-    combined_audio = AudioSegment.empty()
     lines = conversation.split('\n')
-    
+
+    # Selected voices
+    woman_voice_id = "156fb8d2-335b-4950-9cb3-a2d33befec77"
+    man_voice_id = "ee7ea9f8-c0c1-498c-9279-764d6b56d189"
+
+    voice_ids = [woman_voice_id, man_voice_id]
+    random.shuffle(voice_ids)
+
+    audio_segments = []
+    samplerate = None
+
     for line in lines:
         if line.startswith("Speaker 1"):
-            voice = "shimmer"
+            voice_id = voice_ids[0]
             text = line.split(":", 1)[1].strip()
             emotion = line.split("(")[1].split(")")[0]
         elif line.startswith("Speaker 2"):
-            voice = "onyx"
+            voice_id = voice_ids[1]
             text = line.split(":", 1)[1].strip()
             emotion = line.split("(")[1].split(")")[0]
         else:
             continue
 
-        # Adjust speed and pitch based on emotion
         speed = get_speed_for_emotion(emotion)
-        
-        audio_content = text_to_speech(text, voice, speed=speed)
-        audio_segment = AudioSegment.from_wav(io.BytesIO(audio_content))
+        audio_content = text_to_speech(text, voice_id, speed=speed, emotion=emotion)
 
-        # Normalize audio to a consistent volume
-        normalized_audio = audio_segment.normalize()
+        # Read audio data from bytes
+        data, sr = sf.read(io.BytesIO(audio_content))
+        if samplerate is None:
+            samplerate = sr
 
-        # Add a slight fade in and out
-        faded_audio = normalized_audio.fade_in(50).fade_out(50)
+        audio_segments.append(data)
 
-        # Add a random pause for more natural timing
-        combined_audio += faded_audio + AudioSegment.silent(duration=int(50 + 300 * random.random()))
+    # Create silence between segments with random duration
+    silence_durations = np.random.uniform(0.3, 0.7, len(audio_segments) - 1)
+    silences = [np.zeros(int(duration * samplerate), dtype=audio_segments[0].dtype) for duration in silence_durations]
 
-    # Export as WAV for highest quality
-    combined_audio.export("podcast.wav", format="wav", parameters=["-ar", "44100", "-ac", "2"])
+    # Combine all audio segments with varying silence in between
+    combined_audio = np.concatenate([segment for pair in zip(audio_segments, silences + [np.array([])])
+                                     for segment in pair if len(segment) > 0])
 
-    # Convert WAV to MP3 with high bitrate for browser compatibility
-    AudioSegment.from_wav("podcast.wav").export("podcast.mp3", format="mp3", bitrate="192k")
+    # Write the combined audio to a file
+    sf.write("podcast.wav", combined_audio, samplerate)
 
-    os.remove("podcast.wav")
+    print("High-quality podcast generated and saved as 'podcast.wav'")
 
 def get_speed_for_emotion(emotion):
     emotion_speeds = {
-        "curious": 1.0,
-        "explaining": 0.95,
-        "surprised": 1.1,
-        "excited": 1.15,
-        "thoughtful": 0.9,
-        "enthusiastic": 1.12,
-        "reassuring": 1.05,
+        "curious": "normal",
+        "explaining": "slow",
+        "surprised": "fast",
+        "excited": "fast",
+        "thoughtful": "slow",
+        "enthusiastic": "fast",
+        "reassuring": "normal",
     }
-    return emotion_speeds.get(emotion, 1.0)
+    return emotion_speeds.get(emotion, "normal")
+
+def get_supported_emotion_for_emotion(emotion):
+    supported_emotions = ["neutrality", "curiosity", "positivity", "surprise"]
+
+    if emotion in supported_emotions:
+        return emotion
+    if emotion == "curious" or emotion == "thoughtful":
+        return "curiosity"
+    if emotion == "excited" or emotion == "enthusiastic":
+        return "positivity"
+    if emotion == "surprised" or emotion == "reassuring":
+        return "surprise"
+
+    return "neutrality"
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a podcast based on a given topic and resources.")
@@ -128,8 +183,6 @@ def main():
     print(conversation)
 
     create_podcast(conversation)
-
-    print("Podcast generated and saved as 'podcast.mp3'")
 
 if __name__ == "__main__":
     main()
